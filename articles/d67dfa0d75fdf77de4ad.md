@@ -88,19 +88,19 @@ module.exports = function(app) {
 API投げるとこはとりあえずこんな感じで書いとく。
 
 ```ts
-    const onClickFetchData = () => {
-        axios.get<Array<TweetType>>(process.env.REACT_APP_TWITTER_BASE_URL + 
-            "?count=1&screen_name=@xxxxxxxxx" , {
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: "Bearer " + process.env.REACT_APP_TWITTER_API_BEARERTOKEN,
-                }
-            })
-            .then((res) => {
-                console.log(res.data);
-                setTweets(res.data);
-            })
-    }
+const onClickFetchData = () => {
+    axios.get<Array<TweetType>>(process.env.REACT_APP_TWITTER_BASE_URL + 
+        "?count=1&screen_name=@xxxxxxxxx" , {
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + process.env.REACT_APP_TWITTER_API_BEARERTOKEN,
+            }
+        })
+        .then((res) => {
+            console.log(res.data);
+            setTweets(res.data);
+        })
+};
 ```
 
 
