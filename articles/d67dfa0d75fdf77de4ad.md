@@ -3,7 +3,7 @@ title: "駆け出しキラー、CORSを突破して幸せになる"
 emoji: "🍓"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ['React','TypeScript']
-published: false
+published: true
 ---
 
 
