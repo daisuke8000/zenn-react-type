@@ -1,9 +1,9 @@
 ---
-title: "Docker×FastAPI×React(TypeScript) on AWS ECS【AWS前編】"
+title: "Docker×FastAPI×React(TypeScript) on AWS ECS【AWS編】"
 emoji: "😸"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: [docker, python, react, typescript, aws]
-published: false
+published: true
 ---
 
 
@@ -126,7 +126,7 @@ ENV PYTHONUNBUFFERED 1
 
 #install system depedencies
 RUN apt-get update \
-  && apt-get -y install netcat \
+  && apt-get -y install netcat gcc postgresql \
   && apt-get clean
 
 #install python depedencies
@@ -408,34 +408,47 @@ version: 0.2
 env:
   variables:
     AWS_REGION: "ap-northeast-1"
-    REACT_APP_API_SERVICE_URL: "http://localhost:8004"
+    REACT_APP_API_SERVICE_URL: "http://hoge-655470985.ap-northeast-1.elb.amazonaws.com"
 
-  phases:
-    pre_build:
-      commands:
-        - echo logging in to ecr
-        - >
-          aws ecr get-login-password --region $AWS_REGION \
-            - docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-    build:
-      commands:
-        - echo building images app-backend, app-frontend
-        - >
-          docker build \
+phases:
+  pre_build:
+    commands:
+      - echo logging in to ecr...
+      - >
+        aws ecr get-login-password --region $AWS_REGION \
+          | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod || true
+      - docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder || true
+      - docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod || true
+  build:
+    commands:
+      - echo building images app-backend, app-frontend
+      - >
+        docker build \
+          --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod \
           -f project/backend/Dockerfile.prod \
           -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod \
           ./project/backend
-        - >
-          docker build \
+      - >
+        docker build \
+          --target builder \
+          --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder \
+          -f project/frontend/Dockerfile.prod \
+          -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder \
+          --build-arg NODE_ENV=production \
+          --build-arg REACT_APP_API_SERVICE_URL=$REACT_APP_API_SERVICE_URL \
+          ./project/frontend
+      - >
+        docker build \
+          --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod \
           -f project/frontend/Dockerfile.prod \
           -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod \
-          --build-arg NODE_ENV=production \
-          --build-arg REACT_APP_API_SERVICE_URL=${REACT_APP_API_SERVICE_URL} \
           ./project/frontend
-    post_build:
-      commands:
-        - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod
-        - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod
+  post_build:
+    commands:
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod
 ```
 作成後、リポジトリにプッシュします。プッシュしたら自動でbuildが始まります。
 ### 以下のエラーが、ビルドログが発生して成功しない場合
@@ -469,7 +482,7 @@ ELBはEC2のコンソール画面から設定画面に入っていきます。�
 「セキュリティグループを作成」を押す。
 
 `Listeners and routing：新規作成`(frontend用のターゲットグループの設定)
-- Name：`ecs-target-g`
+- Name：`ecs-target-gp`
 - Target type：`Instance`
 - VPC：`ecs-vpc`
 - Port：`80`
@@ -489,7 +502,7 @@ Summaryで設定を確認したら、「ロードバランサーの作成」を�
 
 続けてロードバランサーの設定を追加します。
 `ecs-alb`を選択し、画面下部のリスナータブをクリック。「ルールの表示/編集」をクリックして、ルールの挿入を選択します。
-IF：条件にはパスを選択し、値は`/`
+IF：条件にはパスを選択し、値は`/docs` or `/todos*` or `/openapi.json*`
 THEN：転送先のターゲットグループには`ecs-target-bk-gp`
 
 ![](/images/alb-listen.png)
@@ -505,33 +518,45 @@ env:
     AWS_REGION: "ap-northeast-1"
     REACT_APP_API_SERVICE_URL: "http://<LOAD_BALANCER_DNS_NAME>"
 
-  phases:
-    pre_build:
-      commands:
-        - echo logging in to ecr
-        - >
-          aws ecr get-login-password --region $AWS_REGION \
-            - docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-    build:
-      commands:
-        - echo building images app-backend, app-frontend
-        - >
-          docker build \
+phases:
+  pre_build:
+    commands:
+      - echo logging in to ecr...
+      - >
+        aws ecr get-login-password --region $AWS_REGION \
+          | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod || true
+      - docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder || true
+      - docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod || true
+  build:
+    commands:
+      - echo building images app-backend, app-frontend
+      - >
+        docker build \
+          --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod \
           -f project/backend/Dockerfile.prod \
           -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod \
           ./project/backend
-        - >
-          docker build \
+      - >
+        docker build \
+          --target builder \
+          --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder \
+          -f project/frontend/Dockerfile.prod \
+          -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder \
+          --build-arg NODE_ENV=production \
+          --build-arg REACT_APP_API_SERVICE_URL=$REACT_APP_API_SERVICE_URL \
+          ./project/frontend
+      - >
+        docker build \
+          --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod \
           -f project/frontend/Dockerfile.prod \
           -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod \
-          --build-arg NODE_ENV=production \
-          --build-arg REACT_APP_API_SERVICE_URL=${REACT_APP_API_SERVICE_URL} \
           ./project/frontend
-    post_build:
-      commands:
-        - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod
-        - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod
-
+  post_build:
+    commands:
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend:prod
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:builder
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend:prod
 ```
 
 >example
@@ -592,7 +617,7 @@ REACT_APP_API_SERVICE_URL: "http://ecs-alb-hogehoge-1234568.ap-northeast-1.elb.a
 
 
 ### 追加設定
-`最初のデータベース名：prod`
+`最初のデータベース名：web_prod`
 
 設定を明記しないところに関してはデフォルトで大丈夫です。
 最後に「データベースの作成」を押す。
@@ -713,20 +738,37 @@ Clusterの作成後、最後にサービスを作成します。
 `ターゲットグループ名：ecs-target-bk-gp`
 
 これらを設定後は、他に設定するものはないので「次のステップ」を押して、「サービスの作成」が押せる画面まで移動してください。
-内容を確認したら「サービスの作成」を押す。
+内容を確認したら「サービスの作成」を押します。
 
 これでECSでの設定も終了しました。
-ターゲットグループでのヘルスチェックなども確認しつつ、以下のように自身のALBに置き換えてリンクに遷移してみます。
-http://<LOAD_BALANCER_DNS_NAME>/todos
-※POSTPOST
+ですが、ターゲットグループでのヘルスチェックでNGになっているはずなので、`ecs-sec-gp`のインバウンドルールを追加します。
+`タイプ：すべてのトラフィック`
+`ソース：カスタムを選択し、ecs-seq-gp`
 
-非常に長かったですが、これでECSまで終了になります。
+ここまでやったら一度確認しましょう。自身のALBのDNS名をURLに入力して下さい。
+この時点ではおそらくTodoは機能していません。（多分してないはず、、機能してたら後述はしなくて大丈夫です）そのため、ECSで起動しているEC2にsshで入ります。
+## クラスターEC2へのssh
+先ほど作成したクラスターの「サービス」タブから`back-service`のリンクを押します。
+続けて「タスク」タブを選択し、タスクのリンクを押すと`EC2 インスタンス`のリンクがあるのでこのリンク先に飛びます。
+すると、`ECS Instance - EC2ContainerService-app-cluster`という名前のインスタンスが確認できると思うのでこのインスタンスの詳細タブに表示されている`パブリック IPv4 アドレス`にsshで接続します。
+sshで接続後は、以下の手順で進めて下さい。
 
+- backendのCONTAINER IDを確認
+```sh
+docker ps
+```
+- backendのコンテナに入る
+```sh
+docker exec -it {CONTAINER ID} bash
+```
+- app/db.pyを実行する。
+```sh
+python app/db.py
+```
 
+もう一度、ALBのDNS名をURLに入力して下さい。今度はTodoが機能していることを確認できると思います。
 
+非常に長かったですが、これで全工程終了です。(マジで長かった、、)
 
-
-
-
-
-
+やっぱり、一度ちゃんと動くものを使ってアレンジしながら試してくやり方が理解が進むと思うんですよね。
+またinputの期間を経て、なにかしらかければ良いなと思います。
