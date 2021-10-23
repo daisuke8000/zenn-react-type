@@ -312,7 +312,7 @@ web_prod= \dt
 ```sh
 #frontend
 docker build -f project/frontend/Dockerfile.prod \
--t 714232315359.dkr.ecr.ap-northeast-1.amazonaws.com/frontend:prod \
+-t {AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-1.amazonaws.com/frontend:prod \
 --build-arg NODE_ENV=production \
 --build-arg REACT_APP_API_SERVICE_URL=${REACT_APP_API_SERVICE_URL} \
 ./project/frontend
